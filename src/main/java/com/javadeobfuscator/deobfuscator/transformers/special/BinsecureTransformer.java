@@ -28,14 +28,146 @@ import com.javadeobfuscator.deobfuscator.executor.providers.DelegatingProvider;
 import com.javadeobfuscator.deobfuscator.executor.values.JavaInteger;
 import com.javadeobfuscator.deobfuscator.executor.values.JavaObject;
 import com.javadeobfuscator.deobfuscator.executor.values.JavaValue;
+import com.javadeobfuscator.deobfuscator.matcher.InstructionMatcher;
+import com.javadeobfuscator.deobfuscator.matcher.InstructionPattern;
+import com.javadeobfuscator.deobfuscator.matcher.OpcodeStep;
 import com.javadeobfuscator.deobfuscator.transformers.Transformer;
 import com.javadeobfuscator.deobfuscator.utils.InstructionModifier;
 import com.javadeobfuscator.deobfuscator.utils.TransformerHelper;
 import com.javadeobfuscator.deobfuscator.utils.Utils;
 
 @TransformerConfig.ConfigOptions(configClass = BinsecureTransformer.Config.class)
-public class BinsecureTransformer extends Transformer<BinsecureTransformer.Config>
-{
+public class BinsecureTransformer extends Transformer<BinsecureTransformer.Config> {
+    private static final Map<InstructionPattern, int[]> ARTH_REDUCER = new LinkedHashMap<>();
+
+    static {
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IMUL)),
+                new int[] {Opcodes.INEG});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(ICONST_M1), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.INEG});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(ICONST_1), new OpcodeStep(IADD)),
+                new int[] {Opcodes.INEG});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_1), new OpcodeStep(ISUB), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR)),
+                new int[] {Opcodes.INEG});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IADD), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR)),
+                new int[] {Opcodes.INEG});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(INEG), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.IADD});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IAND), new OpcodeStep(IADD)),
+                new int[] {Opcodes.IADD});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(INEG), new OpcodeStep(IADD)),
+                new int[] {Opcodes.ISUB});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IADD),
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR)),
+                new int[] {Opcodes.ISUB});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP_X1), new OpcodeStep(IOR), new OpcodeStep(SWAP), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ICONST_M1, Opcodes.IXOR, Opcodes.IAND});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(SWAP), new OpcodeStep(DUP_X1), new OpcodeStep(IAND), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ICONST_M1, Opcodes.IXOR, Opcodes.IAND});
+
+        //Custom (fixes many issues)
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP_X1), new OpcodeStep(IOR), new OpcodeStep(ISUB), new OpcodeStep(INEG)),
+                new int[] {Opcodes.ICONST_M1, Opcodes.IXOR, Opcodes.IAND});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(SWAP), new OpcodeStep(ISUB), new OpcodeStep(ICONST_1), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ISUB, Opcodes.ICONST_M1, Opcodes.IXOR});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IADD)),
+                new int[] {Opcodes.ISUB, Opcodes.ICONST_M1, Opcodes.IXOR});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(INEG), new OpcodeStep(ICONST_M1), new OpcodeStep(IADD)),
+                new int[] {Opcodes.ICONST_M1, Opcodes.IXOR});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(ICONST_1), new OpcodeStep(IADD)),
+                new int[] {Opcodes.INEG});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(ISUB), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR)),
+                new int[] {Opcodes.INEG});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(ISUB), new OpcodeStep(ICONST_1), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.IADD});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IXOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IAND), new OpcodeStep(ICONST_2), new OpcodeStep(IMUL), new OpcodeStep(IADD)),
+                new int[] {Opcodes.IADD});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IAND), new OpcodeStep(IADD)),
+                new int[] {Opcodes.IADD});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(ICONST_2), new OpcodeStep(IMUL),
+                        new OpcodeStep(DUP_X2), new OpcodeStep(POP), new OpcodeStep(IXOR), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.IADD});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IADD), new OpcodeStep(ICONST_1), new OpcodeStep(IADD)),
+                new int[] {Opcodes.ISUB});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IXOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND),
+                        new OpcodeStep(ICONST_2), new OpcodeStep(IMUL), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ISUB});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND),
+                        new OpcodeStep(DUP_X2), new OpcodeStep(POP), new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1),
+                        new OpcodeStep(IXOR), new OpcodeStep(IAND), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ISUB});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND),
+                        new OpcodeStep(ICONST_2), new OpcodeStep(IMUL), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IXOR), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.ISUB});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IAND), new OpcodeStep(ISUB)),
+                new int[] {Opcodes.IXOR});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND),
+                        new OpcodeStep(DUP_X2), new OpcodeStep(POP), new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1),
+                        new OpcodeStep(IXOR), new OpcodeStep(IAND), new OpcodeStep(IOR)),
+                new int[] {Opcodes.IXOR});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1),
+                        new OpcodeStep(IXOR), new OpcodeStep(IOR), new OpcodeStep(IAND)),
+                new int[] {Opcodes.IXOR});
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP2), new OpcodeStep(IOR), new OpcodeStep(DUP_X2), new OpcodeStep(POP),
+                        new OpcodeStep(IAND), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND)),
+                new int[] {Opcodes.IXOR});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(DUP_X1), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR), new OpcodeStep(IAND), new OpcodeStep(IADD)),
+                new int[] {Opcodes.IOR});
+
+        ARTH_REDUCER.put(new InstructionPattern(
+                        new OpcodeStep(SWAP), new OpcodeStep(DUP_X1), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR),
+                        new OpcodeStep(IOR), new OpcodeStep(SWAP), new OpcodeStep(ICONST_M1), new OpcodeStep(IXOR),
+                        new OpcodeStep(ISUB)),
+                new int[] {Opcodes.IAND});
+    }
+
     @Override
     public boolean transform() throws Throwable
     {
@@ -77,6 +209,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
         });
 
         AtomicInteger fakeStatic = new AtomicInteger();
+        AtomicInteger arthIndir = new AtomicInteger();
         AtomicInteger fieldIfs = new AtomicInteger();
         AtomicInteger trycatch = new AtomicInteger();
         AtomicInteger xorSwitches = new AtomicInteger();
@@ -97,6 +230,62 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                 }
             }
         }
+
+        //Arithmetic indirection
+        for(ClassNode classNode : classNodes())
+            for(MethodNode method : classNode.methods)
+            {
+                if(method.instructions == null)
+                    continue;
+                boolean modified;
+                do
+                {
+                    modified = false;
+                    Iterator<AbstractInsnNode> itr = method.instructions.iterator();
+                    InstructionModifier modifier = new InstructionModifier();
+
+                    while(itr.hasNext())
+                    {
+                        AbstractInsnNode ain = itr.next();
+                        InstructionMatcher matcher = null;
+                        int[] replacementOpcodes = null;
+                        search:
+                        for(Entry<InstructionPattern, int[]> pattern : ARTH_REDUCER.entrySet())
+                        {
+                            InstructionMatcher matcherNow = pattern.getKey().matcher(ain);
+                            if(matcherNow.find() && (matcher == null
+                                    || matcher.getPattern().getSteps().length < matcherNow.getPattern().getSteps().length))
+                            {
+                                AbstractInsnNode first = matcherNow.getStart();
+                                while(first != matcherNow.getEnd())
+                                {
+                                    first = first.getNext();
+                                    if(first instanceof LabelNode)
+                                        continue search;
+                                }
+                                matcher = matcherNow;
+                                replacementOpcodes = pattern.getValue();
+                            }
+                        }
+                        if(matcher != null)
+                        {
+                            List<AbstractInsnNode> list = matcher.getCapturedInstructions("all");
+                            //Skip instructions that are going to be removed
+                            for(int i = 0; i < replacementOpcodes.length - 1; i++)
+                                itr.next();
+                            InsnList replace = new InsnList();
+                            for(int opcode : replacementOpcodes)
+                                replace.add(new InsnNode(opcode));
+                            modifier.replace(list.remove(0), replace);
+                            modifier.removeAll(list);
+                            modified = true;
+                            arthIndir.incrementAndGet();
+                        }
+                    }
+                    modifier.apply(method);
+                }while(modified);
+            }
+
         //Fake fields
         Map<FieldNode, Integer> fakeFields = new HashMap<>();
         for(ClassNode classNode : classNodes())
@@ -349,7 +538,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                             frames = new Analyzer<>(new SourceInterpreter()).analyze(classNode.name, method);
                         }catch(AnalyzerException e)
                         {
-                            throw new RuntimeException("Unexpected analyzer exception", e);
+                            throw new RuntimeException("Unexpected analyzer exception " + classNode.name + " " + method.name + method.desc, e);
                         }
                     }
 
@@ -540,7 +729,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                             frames = new Analyzer<>(new SourceInterpreter()).analyze(classNode.name, method);
                         }catch(AnalyzerException e)
                         {
-                            throw new RuntimeException("Unexpected analyzer exception", e);
+                            throw new RuntimeException("Unexpected analyzer exception " + classNode.name + " " + method.name + method.desc, e);
                         }
                     }
                 }while(modified);
@@ -570,7 +759,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                     for(int i = 0; i < Type.getArgumentTypes(method.desc).length; i++)
                     {
                         next = next.getNext();
-                        if(next == null || (next.getOpcode() < Opcodes.ILOAD && next.getOpcode() > Opcodes.ALOAD)
+                        if(next == null || next.getOpcode() < Opcodes.ILOAD || next.getOpcode() > Opcodes.ALOAD
                                 || ((VarInsnNode)next).var != index)
                         {
                             failed = true;
@@ -832,10 +1021,37 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
         {
             for(ClassNode classNode : decryptorClasses)
             {
-                classes.remove(classNode.superName);
-                classpath.remove(classNode.superName);
+                if(classNode.superName.equals("java/lang/Object"))
+                {
+                    outer:
+                    for(MethodNode method : classNode.methods)
+                        for(AbstractInsnNode ain : method.instructions.toArray())
+                        {
+                            if(ain.getOpcode() == Opcodes.INVOKEVIRTUAL
+                                    && ((MethodInsnNode)ain).name.equals("get")
+                                    && ((MethodInsnNode)ain).desc.equals("(Ljava/lang/Object;)Ljava/lang/Object;"))
+                            {
+                                boolean ownerCheck = ((MethodInsnNode)ain).owner.equals(classNode.name);
+                                if(!ownerCheck)
+                                {
+                                    ClassNode other = classNodes().stream().filter(
+                                            c -> c.name.equals(((MethodInsnNode)ain).owner)).findFirst().orElse(null);
+                                    if(other != null && other.superName.equals("java/util/concurrent/ConcurrentHashMap"))
+                                    {
+                                        classes.remove(other.name);
+                                        classpath.remove(other.name);
+                                        break outer;
+                                    }
+                                }
+                            }
+                        }
+                }else
+                {
+                    classes.remove(classNode.superName);
+                    classpath.remove(classNode.superName);
+                }
                 classes.remove(classNode.name);
-                classpath.remove(classNode.superName);
+                classpath.remove(classNode.name);
             }
             for(ClassNode classNode : indirectionClasses)
             {
@@ -845,6 +1061,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
         }
 
         System.out.println("[Special] [BinsecureTransformer] Removed " + fakeStatic + " fake static blocks");
+        System.out.println("[Special] [BinsecureTransformer] Removed " + arthIndir + " arithmetic complications");
         System.out.println("[Special] [BinsecureTransformer] Removed " + fieldIfs + " constant field jumps");
         System.out.println("[Special] [BinsecureTransformer] Removed " + trycatch + " try-catch blocks");
         System.out.println("[Special] [BinsecureTransformer] Removed " + xorSwitches + " XOR switches");
@@ -910,19 +1127,38 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
             for(AbstractInsnNode ain : method.instructions.toArray())
             {
                 if(ain.getOpcode() == Opcodes.INVOKEVIRTUAL
-                        && ((MethodInsnNode)ain).owner.equals(classNode.name)
                         && ((MethodInsnNode)ain).name.equals("get")
                         && ((MethodInsnNode)ain).desc.equals("(Ljava/lang/Object;)Ljava/lang/Object;"))
-                    context.customMethodFunc.put(ain, (list, ctx) ->
-                            new JavaObject(mapCache.get(list.get(0).as(Object.class)), "java/lang/String"));
-                else if(ain.getOpcode() == Opcodes.INVOKEVIRTUAL
-                        && ((MethodInsnNode)ain).owner.equals(classNode.name)
+                {
+                    boolean ownerCheck = ((MethodInsnNode)ain).owner.equals(classNode.name);
+                    if(!ownerCheck)
+                    {
+                        ClassNode other = classNodes().stream().filter(
+                                c -> c.name.equals(((MethodInsnNode)ain).owner)).findFirst().orElse(null);
+                        if(other != null)
+                            ownerCheck = other.superName.equals("java/util/concurrent/ConcurrentHashMap");
+                    }
+                    if(ownerCheck)
+                        context.customMethodFunc.put(ain, (list, ctx) ->
+                                new JavaObject(mapCache.get(list.get(0).as(Object.class)), "java/lang/String"));
+                }else if(ain.getOpcode() == Opcodes.INVOKEVIRTUAL
                         && ((MethodInsnNode)ain).name.equals("put")
                         && ((MethodInsnNode)ain).desc.equals("(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;"))
-                    context.customMethodFunc.put(ain, (list, ctx) -> {
-                        mapCache.put(list.get(0).as(String.class), list.get(1).as(String.class));
-                        return null;
-                    });
+                {
+                    boolean ownerCheck = ((MethodInsnNode)ain).owner.equals(classNode.name);
+                    if(!ownerCheck)
+                    {
+                        ClassNode other = classNodes().stream().filter(
+                                c -> c.name.equals(((MethodInsnNode)ain).owner)).findFirst().orElse(null);
+                        if(other != null)
+                            ownerCheck = other.superName.equals("java/util/concurrent/ConcurrentHashMap");
+                    }
+                    if(ownerCheck)
+                        context.customMethodFunc.put(ain, (list, ctx) -> {
+                            mapCache.put(list.get(0).as(String.class), list.get(1).as(String.class));
+                            return null;
+                        });
+                }
             }
         MethodNode mainDecrypter = classNode.methods.stream().filter(m -> m.desc.equals("(Ljava/lang/String;I)Ljava/lang/String;")).findFirst().orElse(null);
         for(AbstractInsnNode ain : mainDecrypter.instructions.toArray())
