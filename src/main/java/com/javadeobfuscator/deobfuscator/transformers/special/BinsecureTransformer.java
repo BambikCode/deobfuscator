@@ -1,13 +1,42 @@
 package com.javadeobfuscator.deobfuscator.transformers.special;
 
 import java.lang.reflect.Modifier;
-import java.util.*;
+
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.tree.*;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.IincInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.InvokeDynamicInsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.LabelNode;
+import org.objectweb.asm.tree.LdcInsnNode;
+import org.objectweb.asm.tree.LookupSwitchInsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.TableSwitchInsnNode;
+import org.objectweb.asm.tree.TryCatchBlockNode;
+import org.objectweb.asm.tree.TypeInsnNode;
+import org.objectweb.asm.tree.VarInsnNode;
 import org.objectweb.asm.tree.analysis.Analyzer;
 import org.objectweb.asm.tree.analysis.AnalyzerException;
 import org.objectweb.asm.tree.analysis.Frame;
@@ -37,10 +66,12 @@ import com.javadeobfuscator.deobfuscator.utils.TransformerHelper;
 import com.javadeobfuscator.deobfuscator.utils.Utils;
 
 @TransformerConfig.ConfigOptions(configClass = BinsecureTransformer.Config.class)
-public class BinsecureTransformer extends Transformer<BinsecureTransformer.Config> {
+public class BinsecureTransformer extends Transformer<BinsecureTransformer.Config>
+{
     private static final Map<InstructionPattern, int[]> ARTH_REDUCER = new LinkedHashMap<>();
 
-    static {
+    static
+    {
         ARTH_REDUCER.put(new InstructionPattern(
                         new OpcodeStep(ICONST_M1), new OpcodeStep(IMUL)),
                 new int[] {Opcodes.INEG});
@@ -349,8 +380,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                     {
                         itr.remove();
                         trycatch.incrementAndGet();
-                    }
-                    else if(handler.getNext() != null && handler.getNext().getOpcode() == Opcodes.DUP
+                    }else if(handler.getNext() != null && handler.getNext().getOpcode() == Opcodes.DUP
                             && handler.getNext().getNext() != null && handler.getNext().getNext().getOpcode() == Opcodes.IFNULL
                             && handler.getNext().getNext().getNext() != null
                             && ((handler.getNext().getNext().getNext().getOpcode() == Opcodes.CHECKCAST
@@ -1177,7 +1207,7 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                     context.customMethodFunc.put(ain, (list, ctx) -> {
                         throw new NoClassDefFoundError("Fake class");
                     });
-            }else if(ain instanceof InvokeDynamicInsnNode)
+            } else if(ain instanceof InvokeDynamicInsnNode)
                 context.customMethodFunc.put(ain, (list, ctx) -> {
                     throw new BootstrapMethodError("Fake invokedynamic");
                 });
