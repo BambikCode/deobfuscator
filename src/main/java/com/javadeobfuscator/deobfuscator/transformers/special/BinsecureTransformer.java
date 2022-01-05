@@ -1202,8 +1202,8 @@ public class BinsecureTransformer extends Transformer<BinsecureTransformer.Confi
                 });
             else if(ain instanceof MethodInsnNode)
             {
-                ClassNode cn = classpath.values().stream().filter(c -> c.name.equals(((MethodInsnNode)ain).owner)).findFirst().orElse(null);
-                if(cn == null)
+                ClassNode cn = classNodes().stream().filter(c -> c.name.equals(((MethodInsnNode)ain).owner)).findFirst().orElse(null);
+                if(cn == null && !((MethodInsnNode)ain).owner.startsWith("java/lang"))
                     context.customMethodFunc.put(ain, (list, ctx) -> {
                         throw new NoClassDefFoundError("Fake class");
                     });
